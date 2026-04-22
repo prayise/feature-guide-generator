@@ -23,12 +23,24 @@ description: "정책 문서 + 코드베이스(필수) + 화면 이미지(선택)
 
 ## 사전 요구사항
 
-1. **NotebookLM CLI 설치**:
+1. **NotebookLM CLI 설치** (uv 기반 권장 — Python 3.10+ 자동 격리):
    ```bash
-   pip install notebooklm-py
+   # 이미 pip로 구버전(0.1.1)을 설치한 적이 있다면 먼저 제거
+   /usr/bin/python3 -m pip uninstall -y notebooklm-py 2>/dev/null || true
+
+   # uv tool로 최신 버전 설치 (browser extra: 이미지·팟캐스트·비디오 기능 활성화)
+   uv tool install 'notebooklm-py[browser]'
+
+   # 로그인 및 언어 설정
    notebooklm login
    notebooklm language set ko   # 한국어 산출물
+
+   # 설치 확인
+   which notebooklm             # → ~/.local/bin/notebooklm
+   notebooklm --version         # → 0.3.4 이상
    ```
+
+   > **⚠️ `pip install notebooklm-py` 사용 금지** — macOS 기본 Python은 3.9라서 PyPI가 **구버전 0.1.1만 내려주고**, 최신 0.3.4(이미지·팟캐스트·browser extra 지원)는 설치 불가. `uv tool install`이 자동으로 Python 3.10+ venv를 만들어 최신 버전을 분리 설치한다. 과거 `pip`로 설치된 흔적이 PATH 앞쪽(`~/Library/Python/3.9/bin`)에 남아 있으면 CLI가 0.1.1로 잘못 잡히므로 위의 `uninstall` 한 줄을 반드시 먼저 실행할 것.
 2. **프로젝트 구조**: `projects/{service}/{project}/` 아래에 정책 문서(`*--detailed-spec.md` 또는 `*--high-level-plan.md`) 존재
 3. **코드베이스 접근 권한**: 해당 도메인의 API/Web 레포지토리에 Grep/Glob 가능
 4. **(선택) 화면 이미지**: `assets/` 또는 `mockup/` 폴더의 PNG. **있으면 화면별 상세 모드**, 없으면 **정책·코드 모드**로 생성 (아래 참조)
