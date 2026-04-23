@@ -1,6 +1,6 @@
 # guide-gen 워크플로우 상세 실행 가이드
 
-## 단계 0: 사전 체크
+## 단계 0A: 사전 체크 (설치 확인)
 
 ```bash
 # NotebookLM CLI 확인
@@ -12,41 +12,114 @@ notebooklm language get
 # → ko (한국어)
 ```
 
-미설정 시:
-```bash
-pip install notebooklm-py
-notebooklm login
-notebooklm language set ko
+미설정 시 `SKILL.md`의 "사전 요구사항" 섹션을 따라 `uv tool install 'notebooklm-py[browser]'` 수행.
+
+## 단계 0B: 대화형 입력 수집 (핵심)
+
+로컬마다 프로젝트·코드 경로가 다르므로, 파일 경로를 가정하지 말고 **다음 5개 값을 사용자에게 순서대로 질문**한다. 플래그로 이미 전달된 항목은 해당 질문을 생략한다.
+
+### 0B-1. 질문 순서
+
+```
+[1/5] 참고할 정책 문서 경로를 입력해 주세요.
+      (예: projects/skillflo/B2M-권한시스템/sf-b2m-auth--detailed-spec.md)
+      여러 개면 쉼표(,) 또는 줄바꿈으로 구분하세요.
+      입력: _
+
+[2/5] 참고할 화면 이미지 경로를 입력해 주세요.
+      폴더 또는 개별 파일 여러 개 모두 가능. 없으면 엔터.
+      (예: projects/skillflo/B2M-권한시스템/assets/)
+      ※ 비워두면 모드 A (정책·코드 모드)로 진행됩니다.
+      입력: _
+
+[3/5] 참고할 코드베이스 루트 경로를 입력해 주세요.
+      없으면 엔터. 여러 레포는 쉼표(,) 구분.
+      (예: /Users/charlie/vibe_project/skillflo-api-main)
+      입력: _
+
+[4/5] 대상 독자(audience)를 입력해 주세요.
+      (예: 운영팀(CSM/교담자), 고객사 교육담당자)
+      입력: _
+
+[5/5] 목적(purpose)을 입력해 주세요.
+      (예: 4/21 릴리즈 교육, 셀프 온보딩)
+      입력: _
 ```
 
-## 단계 1: 프로젝트 스캔 & 코드 추출
+### 0B-2. 각 입력 검증
 
-### 1-1. 프로젝트 폴더 확인
+각 입력 수집 직후 즉시 검증하고 실패 시 재질문한다:
 
 ```bash
-PROJECT_DIR="projects/{service}/{project}"
-ls "$PROJECT_DIR"
-# 찾을 것:
-# - {slug}--detailed-spec.md (또는 --high-level-plan.md)
-# - assets/ 또는 mockup/ 아래 PNG
-# - {slug}--context.md (도메인 키워드 파악용)
+# 정책 문서 경로
+test -f "$SPEC_PATH" || { echo "경로를 찾을 수 없습니다. 다시 입력해 주세요."; read; }
+
+# 이미지 경로 (빈 값 허용)
+if [ -n "$IMAGES_PATH" ]; then
+  if [ -d "$IMAGES_PATH" ]; then
+    # 폴더면 PNG 개수 카운트
+    PNG_COUNT=$(find "$IMAGES_PATH" -maxdepth 1 -name "*.png" | wc -l)
+    echo "→ ${PNG_COUNT}장 발견"
+  elif [ -f "$IMAGES_PATH" ]; then
+    echo "→ 단일 이미지 사용"
+  else
+    echo "경로가 올바르지 않습니다. 다시 입력해 주세요."
+  fi
+fi
+
+# 코드베이스 경로 (빈 값 허용)
+[ -z "$CODE_PATH" ] || test -d "$CODE_PATH" || echo "코드베이스 폴더를 찾을 수 없습니다. 다시 입력해 주세요."
 ```
 
-### 1-2. 도메인 키워드 추출
+### 0B-3. 이미지 30장 이상일 때 추가 선별
 
-`{slug}--context.md`의 "프로젝트 한 줄 요약" 섹션과 "핵심 의사결정" 테이블에서 키워드를 뽑는다. 예:
+폴더에 PNG가 30장 넘으면 선별을 요청한다:
+
+```
+→ 32장 발견. 발표 흐름에 쓸 5~15장을 선택해 주세요.
+   방법 1: 파일명 콤마 구분 입력
+   방법 2: "추천"이라고 답하면 파일명 패턴으로 자동 샘플링
+   입력: _
+```
+
+### 0B-4. 수집 요약 & 진행 확인
+
+5개 값을 다 받은 뒤 요약 박스를 출력하고 `진행 (y/n)` 확인:
+
+```
+┌─ 수집된 입력 요약 ──────────────────────────
+│ [1] 정책 문서 : projects/.../sf-b2m-auth--detailed-spec.md
+│ [2] 이미지    : projects/.../assets/ (12장)
+│ [3] 코드베이스: /Users/charlie/vibe_project/skillflo-api-main
+│ [4] 대상 독자 : 운영팀(CSM/교담자)
+│ [5] 목적      : 4/21 릴리즈 교육
+│ 모드         : B (화면별 상세) — 이미지 있음
+│ 출력 경로    : projects/.../assets/sf-b2m-auth-guide.{pdf,pptx}
+└────────────────────────────────────────
+진행할까요? (y/n): _
+```
+
+**n 응답 시**: 어느 항목을 고칠지 번호로 되묻고 해당 값만 다시 받는다.
+
+## 단계 1: 도메인 키워드 추출 & 코드 식별
+
+### 1-1. 도메인 키워드 추출
+
+정책 문서(0B-1의 [1])와 같은 폴더의 `{slug}--context.md`가 있으면 "프로젝트 한 줄 요약" + "핵심 의사결정" 테이블에서 키워드를 뽑는다. 예:
 - B2M 권한시스템 → `b2m`, `member`, `role`, `permission`, `권한`
 - 진단 티켓 → `diagnosis`, `ticket`, `skill`
 - 강의후기 게시판 → `course-review`, `board`, `comment`
 
-### 1-3. 코드베이스 Grep/Glob
+### 1-2. 코드베이스 Grep/Glob
+
+0B-1의 [3]에서 받은 코드베이스 경로가 있을 때만 수행한다. 없으면 이 단계를 건너뛴다.
 
 ```bash
 # API 레포 (TypeORM/NestJS 계열)
-find <api-repo>/src -path "*{keyword1}*" -o -path "*{keyword2}*" | grep -E '\.(ts)$' | head -10
+find "$CODE_PATH/src" -path "*{keyword1}*" -o -path "*{keyword2}*" | grep -E '\.(ts)$' | head -10
 
 # Web 레포 (React)
-find <web-repo>/src -path "*{keyword}*" | grep -E '\.(tsx?)$' | head -10
+find "$CODE_PATH/src" -path "*{keyword}*" | grep -E '\.(tsx?)$' | head -10
 ```
 
 **균형 원칙** — API 핸들러 2~3개 + 스키마 1~2개 + Web 뷰 2~3개 = 5~10개가 적당. 너무 많으면 NotebookLM 색인 속도 저하.
